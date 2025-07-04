@@ -16,28 +16,37 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $stmt->execute([$email]);
         $user = $stmt->fetch();
 
-        if ($user) {
-            // Verify password against password_hash column
-            if (password_verify($password, $user['password_hash'])) {
-                // Store important info in session
-                $_SESSION['user_id'] = $user['id'];
-                $_SESSION['username'] = $user['username'];
-                $_SESSION['role'] = $user['role'];
+        if ($user && password_verify($password, $user['password_hash'])) {
+            $_SESSION['user_id'] = $user['id'];
+            $_SESSION['username'] = $user['username'];
 
-                // Redirect user based on their role
-                if ($user['role'] === 'admin') {
-                    header("Location: admin/dashboard.php");
-                } elseif ($user['role'] === 'seller') {
-                    header("Location: seller/dashboard.php");
-                } else {
-                    header("Location: customer/dashboard.php");
-                }
-                exit;  // Stop script after redirect
+            // Fetch ALL roles for this user from user_roles
+            $stmt = $pdo->prepare("
+                SELECT r.name 
+                FROM user_roles ur
+                JOIN roles r ON ur.role_id = r.id
+                WHERE ur.user_id = ?
+            ");
+            $stmt->execute([$user['id']]);
+            $roles = $stmt->fetchAll(PDO::FETCH_COLUMN);
+
+            // Save array of roles into session
+            $_SESSION['roles'] = $roles;
+
+            // Redirect based on first matching dashboard
+            if (in_array('admin', $roles)) {
+                header("Location: ../admin/dashboard.php");
+            } elseif (in_array('seller', $roles)) {
+                header("Location: ../seller/dashboard.php");
+            } elseif (in_array('customer', $roles)) {
+                header("Location: ../customer/dashboard.php");
             } else {
-                $message = "Incorrect password.";
+                echo "You have no roles assigned.";
+                exit;
             }
+            exit;
         } else {
-            $message = "User not found.";
+            $message = "Invalid email or password.";
         }
     }
 }
